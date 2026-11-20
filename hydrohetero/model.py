@@ -226,9 +226,13 @@ def transport(K, settings, rng, detail=False):
     # alpha_l, alpha_t, diffusion, planes, n_particles, source and (for detail) snapshots
     g = settings
     h, qx, qy = flow(K, g['d'], g['gradient'])
-    tracked = track(qx, qy, g['d'], g['porosity'], g['planes'], g['n_particles'], rng, g['alpha_l'], g['alpha_t'],
+    planes = list(g['planes'])
+    if detail:
+        # carry the particles on to the right-hand edge, so the plotted paths cross the whole field
+        planes.append(K.shape[1] * g['d'] * (1 - 1e-9))
+    tracked = track(qx, qy, g['d'], g['porosity'], planes, g['n_particles'], rng, g['alpha_l'], g['alpha_t'],
                     g['diffusion'], g['source'], snapshots=g['snapshots'] if detail else (), paths=60 if detail else 0)
-    out = dict(arrival=tracked['arrival'], k_effective=effective_k(qx, g['d'], g['gradient']))
+    out = dict(arrival=tracked['arrival'][:, :len(g['planes'])], k_effective=effective_k(qx, g['d'], g['gradient']))
     if detail:
         out.update(head=h, snapshots=tracked['snapshots'], paths=tracked['paths'])
     return out

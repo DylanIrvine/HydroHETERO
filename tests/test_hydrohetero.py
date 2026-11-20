@@ -95,6 +95,17 @@ def test_macrodispersion_at_small_variance():
     assert apparent == pytest.approx(model.macrodispersivity(0.5, 4.0) + 0.05, rel=0.25)
 
 
+def test_detail_run_tracks_to_the_edge():
+    rng = np.random.default_rng(9)
+    K = model.k_field(120, 60, 1.0, 10.0, 1.0, 5.0, 'Multi-Gaussian', rng)
+    g = dict(d=1.0, gradient=0.01, porosity=0.3, alpha_l=0.1, alpha_t=0.01, diffusion=0.0, planes=[30.0, 60.0],
+             n_particles=300, source=None, snapshots=[50.0])
+    plain, detail = model.transport(K, g, rng), model.transport(K, g, rng, detail=True)
+    assert plain['arrival'].shape == detail['arrival'].shape == (300, 2)
+    assert detail['paths'][-1, :, 0].min() > 119.0          # every plotted path reaches the right-hand edge
+    assert np.median(detail['arrival'][:, 1]) == pytest.approx(np.median(plain['arrival'][:, 1]), rel=0.1)
+
+
 def test_strip_source_and_snapshots():
     rng = np.random.default_rng(7)
     h, qx, qy = model.flow(np.full((40, 100), 10.0), 1.0, 0.01)
@@ -159,6 +170,14 @@ def test_app_runs():
     assert 'Download the transport workbook (.xlsx)' in downloads()
     press('Track particles')
     assert 'Download paths (.csv)' in downloads()
+    # changing an input leaves every button usable and says that the results are out of date
+    assert not app.get('warning')
+    [box for box in app.number_input if box.label.startswith('Standard deviation')][0].set_value(2.0).run()
+    [box for box in app.number_input if box.label.startswith('Mean hydraulic gradient')][0].set_value(0.02).run()
+    assert len(app.get('warning')) == 2 and not any(button.disabled for button in app.button)
+    press('Generate fields')
+    press('Run transport')
+    assert not app.get('warning')
     [radio for radio in app.radio if radio.label == 'Release from'][0].set_value('Region').run()
     press('Track particles')
     assert not app.exception

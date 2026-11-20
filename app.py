@@ -180,6 +180,7 @@ else:
                    'barriers can dominate and results will vary a lot between fields.')
 for problem in problems:
     st.info(problem)
+field_inputs = (structure, k_geometric, sigma, length, domain_x, domain_y, d, n_fields, seed)
 
 if st.button('Generate fields', type='primary', disabled=bool(problems)):
     rng = np.random.default_rng(seed)
@@ -193,7 +194,8 @@ if st.button('Generate fields', type='primary', disabled=bool(problems)):
     table += list(entered.items()) + [('Grid', f'{nx} by {ny} cells'), ('Number of K fields', n_fields),
                                       ('Random seed', seed)]
     st.session_state['fields'] = dict(K=fields, d=d, nx=nx, ny=ny, k_geometric=k_geometric, sigma=sigma,
-                                      length=length, structure=structure, seed=seed, settings=table)
+                                      length=length, structure=structure, seed=seed, settings=table,
+                                      inputs=field_inputs)
     for stale in ('transport', 'tracking', 'field_zip'):
         st.session_state.pop(stale, None)
     new_total = run_counter.increment_runs()
@@ -221,7 +223,7 @@ def settings_text(rows):
 
 
 if 'fields' not in st.session_state:
-    st.caption('Generate the fields first. The steps below use them.')
+    st.caption('Press Generate fields to make the fields. The download, transport and particle tracking steps appear below once they exist.')
     st.stop()
 
 F = st.session_state['fields']
@@ -231,6 +233,9 @@ size_x, size_y = F['nx'] * fd, F['ny'] * fd
 FIGURE_DPI = st.radio('Figure download resolution (dpi)', [300, 600], horizontal=True)
 
 st.subheader('The fields')
+if F['inputs'] != field_inputs:
+    st.warning('The inputs above have changed since these fields were made. Press Generate fields to apply '
+               'the changes. Until then, everything below uses the earlier fields.')
 st.caption(f"{len(fields)} fields, {F['structure']}, {F['nx']} by {F['ny']} cells. Change any input above "
            'and press Generate fields again to replace them.')
 shown = st.number_input('Field to show', value=1, min_value=1, max_value=len(fields), step=1) - 1
@@ -338,6 +343,8 @@ if not problems:
     st.caption(f'Rough run time: {max(1, round(seconds))} seconds on a typical server.')
 for problem in problems:
     st.info(problem)
+transport_inputs = (gradient, porosity, alpha_l, alpha_t, diffusion, source, tuple(ts), tuple(cs), tuple(planes),
+                    t_end, n_particles)
 
 if st.button('Run transport', type='primary', disabled=bool(problems)):
     try:
@@ -372,12 +379,15 @@ if st.button('Run transport', type='primary', disabled=bool(problems)):
         st.session_state['transport'] = dict(
             times=times, curves=[np.array(c) for c in curves], theory=theory, planes=planes, source=source,
             first=first, snapshots=snapshots, ts=ts, cs=cs, k_ratio=np.array(k_ratio), medians=np.array(medians),
+            inputs=transport_inputs,
             settings=pd.DataFrame(table, columns=['Setting', 'Value']).astype(str))
     except Exception as error:
         st.error(f'Run failed: {error}')
 
 if 'transport' in st.session_state:
     r = st.session_state['transport']
+    if r['inputs'] != transport_inputs:
+        st.warning('The transport inputs have changed since these results were made. Press Run transport to update them.')
     times, rplanes, first = r['times'], r['planes'], r['first']
     col1, col2, col3 = st.columns(3)
     col1.metric('Effective K / geometric mean', f"{np.mean(r['k_ratio']):.2f}")
@@ -397,8 +407,8 @@ if 'transport' in st.session_state:
 
     st.subheader('Field 1')
     show(plots.field(fields[0], fd, first['paths'], rplanes, r['source'], colours), f'{prefix}_paths')
-    st.caption('Hydraulic conductivity, with the paths of 60 particles in white as far as the last '
-               'control plane. The source is the bar on the left edge and the dashed lines are the control planes.')
+    st.caption('Hydraulic conductivity, with the paths of 60 particles in white. The source is the bar on '
+               'the left edge and the dashed lines are the control planes.')
     show(plots.clouds(fields[0], fd, first['snapshots'], r['snapshots'], rplanes, r['source'], colours),
          f'{prefix}_plume')
     st.caption('Where solute released at time zero has reached at three times.')
