@@ -3,6 +3,7 @@
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.image as mimage
+import matplotlib.patheffects as patheffects
 import matplotlib.pyplot as plt
 import matplotlib.transforms as mtransforms
 from matplotlib.colors import LogNorm
@@ -19,6 +20,8 @@ DEFAULT_COLOURS = {
     'Control planes': '#0DB14B',
     'Extra': '#FCB711',
 }
+# colour maps offered for the K fields. The first is the default
+COLOUR_MAPS = ['cividis', 'viridis', 'cubehelix', 'gist_earth', 'Purples', 'Greys', 'YlOrBr', 'BuGn', 'BuPu', 'YlGnBu']
 WATERMARK = 'Dylan Irvine, Charles Darwin University'
 BADGE_ICON = Path(__file__).resolve().parents[1] / 'logo' / 'HydroHETERO_badge.png'
 
@@ -71,10 +74,21 @@ def legend_above(ax, ncols=3):
               handlelength=1.5, columnspacing=1.2)
 
 
-def _k_map(ax, K, d, limits=None, alpha=1.0):
+def path_style(cmap):
+    # line colour for particle paths over a colour map: white on a dark map, near black on a
+    # light one, with a thin outline in the other tone so paths stay visible where the map
+    # passes through the line colour
+    r, g, b = matplotlib.colormaps[cmap](np.linspace(0, 1, 64))[:, :3].T
+    light = (0.299 * r + 0.587 * g + 0.114 * b).mean() > 0.55
+    line, outline = ('0.1', 'white') if light else ('white', '0.1')
+    return dict(color=line, lw=0.6, alpha=0.9,
+                path_effects=[patheffects.withStroke(linewidth=1.3, foreground=outline, alpha=0.35)])
+
+
+def _k_map(ax, K, d, limits=None, alpha=1.0, cmap='cividis'):
     ny, nx = K.shape
     limits = limits or (K.min(), K.max())
-    return ax.imshow(K, origin='lower', extent=(0, nx * d, 0, ny * d), cmap='cividis', alpha=alpha,
+    return ax.imshow(K, origin='lower', extent=(0, nx * d, 0, ny * d), cmap=cmap, alpha=alpha,
                      norm=LogNorm(*limits), aspect='equal', interpolation='nearest')
 
 
@@ -85,14 +99,14 @@ def _marks(ax, planes, source, width, c):
         ax.axvline(plane, color=c['Control planes'], lw=1.2, ls='--', zorder=4)
 
 
-def field(K, d, paths=None, planes=(), source=None, c=DEFAULT_COLOURS, marks=True, starts=None):
+def field(K, d, paths=None, planes=(), source=None, c=DEFAULT_COLOURS, marks=True, starts=None, cmap='cividis'):
     # the K field of one realisation, optionally with particle paths, the source line and
     # control planes (marks), or the starting points of tracked particles (starts)
     ny, nx = K.shape
     fig, ax = plt.subplots(figsize=cm(16, 3.5 + 12.5 * ny / nx), layout='constrained')
-    image = _k_map(ax, K, d)
+    image = _k_map(ax, K, d, cmap=cmap)
     if paths is not None:
-        ax.plot(paths[:, :, 0], paths[:, :, 1], color='white', lw=0.5, alpha=0.8)
+        ax.plot(paths[:, :, 0], paths[:, :, 1], **path_style(cmap))
     if marks:
         _marks(ax, planes, source, ny * d, c)
     if starts is not None:
@@ -105,13 +119,13 @@ def field(K, d, paths=None, planes=(), source=None, c=DEFAULT_COLOURS, marks=Tru
     return fig
 
 
-def clouds(K, d, snapshots, times, planes, source, c):
+def clouds(K, d, snapshots, times, planes, source, c, cmap='cividis'):
     # where the particles of one realisation are at each chosen time, over a faint K field
     ny, nx = K.shape
     fig, axes = plt.subplots(len(times), 1, figsize=cm(16, 1.5 + len(times) * (1.2 + 12.5 * ny / nx)),
                              sharex=True, squeeze=False, layout='constrained')
     for ax, cloud, t in zip(axes[:, 0], snapshots, times):
-        _k_map(ax, K, d, alpha=0.35)
+        _k_map(ax, K, d, alpha=0.35, cmap=cmap)
         ax.plot(cloud[:, 0], cloud[:, 1], '.', color=c['Median and particles'], ms=1.5, alpha=0.6)
         _marks(ax, planes, source, ny * d, c)
         ax.set_ylabel('y (m)')

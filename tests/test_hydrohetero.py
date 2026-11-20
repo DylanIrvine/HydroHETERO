@@ -95,6 +95,16 @@ def test_macrodispersion_at_small_variance():
     assert apparent == pytest.approx(model.macrodispersivity(0.5, 4.0) + 0.05, rel=0.25)
 
 
+def test_colour_maps():
+    import matplotlib
+    from hydrohetero import plots
+    assert set(plots.COLOUR_MAPS) >= {'viridis', 'cubehelix', 'gist_earth', 'Purples', 'Greys', 'YlOrBr', 'BuGn', 'BuPu', 'YlGnBu'}
+    assert all(name in matplotlib.colormaps for name in plots.COLOUR_MAPS)
+    # paths are white on the dark maps and near black on the light ones
+    assert plots.path_style('viridis')['color'] == 'white' and plots.path_style('cividis')['color'] == 'white'
+    assert plots.path_style('Greys')['color'] == '0.1' and plots.path_style('YlOrBr')['color'] == '0.1'
+
+
 def test_detail_run_tracks_to_the_edge():
     rng = np.random.default_rng(9)
     K = model.k_field(120, 60, 1.0, 10.0, 1.0, 5.0, 'Multi-Gaussian', rng)
@@ -170,6 +180,8 @@ def test_app_runs():
     assert 'Download the transport workbook (.xlsx)' in downloads()
     press('Track particles')
     assert 'Download paths (.csv)' in downloads()
+    [box for box in app.selectbox if box.label.startswith('Colour map')][0].set_value('YlGnBu').run()
+    assert not app.exception
     # changing an input leaves every button usable and says that the results are out of date
     assert not app.get('warning')
     [box for box in app.number_input if box.label.startswith('Standard deviation')][0].set_value(2.0).run()

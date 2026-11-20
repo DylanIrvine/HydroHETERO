@@ -238,8 +238,12 @@ if F['inputs'] != field_inputs:
                'the changes. Until then, everything below uses the earlier fields.')
 st.caption(f"{len(fields)} fields, {F['structure']}, {F['nx']} by {F['ny']} cells. Change any input above "
            'and press Generate fields again to replace them.')
-shown = st.number_input('Field to show', value=1, min_value=1, max_value=len(fields), step=1) - 1
-show(plots.field(fields[shown], fd, c=colours, marks=False), f'{prefix}_field_{shown + 1}')
+col1, col2 = st.columns(2)
+shown = col1.number_input('Field to show', value=1, min_value=1, max_value=len(fields), step=1) - 1
+cmap = col2.selectbox('Colour map for the fields', plots.COLOUR_MAPS,
+                      help='Applies to every map of K on this page. Particle paths switch between white and '
+                           'black to stay visible.')
+show(plots.field(fields[shown], fd, c=colours, marks=False, cmap=cmap), f'{prefix}_field_{shown + 1}')
 
 st.subheader('Download the fields')
 st.caption('If the fields are all you need, this is the place to stop. Choose the formats and download '
@@ -406,10 +410,10 @@ if 'transport' in st.session_state:
                'dashed line is a uniform aquifer with the macrodispersivity from first-order theory.')
 
     st.subheader('Field 1')
-    show(plots.field(fields[0], fd, first['paths'], rplanes, r['source'], colours), f'{prefix}_paths')
-    st.caption('Hydraulic conductivity, with the paths of 60 particles in white. The source is the bar on '
+    show(plots.field(fields[0], fd, first['paths'], rplanes, r['source'], colours, cmap=cmap), f'{prefix}_paths')
+    st.caption('Hydraulic conductivity, with the paths of 60 particles as thin lines. The source is the bar on '
                'the left edge and the dashed lines are the control planes.')
-    show(plots.clouds(fields[0], fd, first['snapshots'], r['snapshots'], rplanes, r['source'], colours),
+    show(plots.clouds(fields[0], fd, first['snapshots'], r['snapshots'], rplanes, r['source'], colours, cmap=cmap),
          f'{prefix}_plume')
     st.caption('Where solute released at time zero has reached at three times.')
 
@@ -489,11 +493,11 @@ if st.button('Track particles', type='primary', disabled=bool(problems)):
 
 if 'tracking' in st.session_state:
     k = st.session_state['tracking']
-    show(plots.field(fields[k['field']], fd, k['paths'], k['planes'], None, colours, marks=False, starts=k['starts']),
-         f'{prefix}_tracking')
+    show(plots.field(fields[k['field']], fd, k['paths'], k['planes'], None, colours, marks=False, starts=k['starts'],
+                     cmap=cmap), f'{prefix}_tracking')
     labels = [f'x = {x:g} m' for x in k['planes']] + ['Right-hand edge']
     reached = np.isfinite(k['arrival'][:, -1]).mean() * 100
-    st.caption(f"Field {k['field'] + 1}. Dots are the starting points and white lines are the paths"
+    st.caption(f"Field {k['field'] + 1}. Dots are the starting points and the thin lines are the paths"
                + (', with local dispersion.' if k['dispersion'] else ', following the flow only.')
                + f' {reached:.0f}% of particles reached the right-hand edge.')
     show(plots.travel_times(k['arrival'], labels, colours), f'{prefix}_travel_times')
