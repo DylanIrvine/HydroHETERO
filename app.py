@@ -182,7 +182,10 @@ for problem in problems:
     st.info(problem)
 field_inputs = (structure, k_geometric, sigma, length, domain_x, domain_y, d, n_fields, seed)
 
-if st.button('Generate fields', type='primary', disabled=bool(problems)):
+generate_pressed = st.button('Generate fields', type='primary')
+if generate_pressed and problems:
+    st.error('The fields were not generated. Fix the points listed above, then press Generate fields again.')
+if generate_pressed and not problems:
     rng = np.random.default_rng(seed)
     bar = st.progress(0.0, text='Starting...')
     fields = []
@@ -327,8 +330,9 @@ def plane_list(text, label):
     except ValueError:
         problems.append(f'Enter the {label} as numbers separated by commas.')
         return []
-    if len(values) > 4 or any(not 0 < x < size_x for x in values):
-        problems.append(f'Enter up to four {label}, each inside the domain.')
+    if len(values) > 4 or any(not 0 < x <= size_x for x in values):
+        problems.append(f'Enter up to four {label}, each above 0 and no more than {size_x:g} m, which is the '
+                        'length of the fields made in step 1.')
         return []
     return values
 
@@ -342,18 +346,34 @@ t_end = number('Length of the calculation (days)', float(f'{2.5 * size_x / veloc
 n_particles = col2.select_slider('Particles per field', [500, 1000, 2000, 5000, 10000], value=2000)
 if t_end <= 0:
     problems.append('The length of the calculation must be greater than zero.')
+snapshot_text = st.text_input('Times of the particle snapshots (days)', value='',
+                              help='Optional. Up to five times, separated by commas. Left blank, three times '
+                                   'are chosen from the travel time to the last control plane.')
+snapshots = []
+try:
+    snapshots = sorted({float(part) for part in snapshot_text.replace(';', ',').split(',') if part.strip()})
+except ValueError:
+    problems.append('Enter the snapshot times as numbers separated by commas.')
+if len(snapshots) > 5 or min(snapshots, default=1) <= 0:
+    problems.append('Enter up to five snapshot times, each greater than zero.')
+if not snapshots and planes:
+    snapshots = [float(f'{fraction * planes[-1] / velocity:.3g}') for fraction in (0.25, 0.6, 1.0)]
+    if not snapshot_text.strip():
+        st.caption('Snapshots will be at ' + ', '.join(f'{t:g}' for t in snapshots) + ' days.')
 if not problems:
     seconds = len(fields) * (F['nx'] * F['ny'] / 20000 * 0.08 + n_particles * F['nx'] / 200 * 1e-4)
     st.caption(f'Rough run time: {max(1, round(seconds))} seconds on a typical server.')
 for problem in problems:
     st.info(problem)
 transport_inputs = (gradient, porosity, alpha_l, alpha_t, diffusion, source, tuple(ts), tuple(cs), tuple(planes),
-                    t_end, n_particles)
+                    t_end, n_particles, tuple(snapshots))
 
-if st.button('Run transport', type='primary', disabled=bool(problems)):
+transport_pressed = st.button('Run transport', type='primary')
+if transport_pressed and problems:
+    st.error('Transport was not run. Fix the points listed above, then press Run transport again.')
+if transport_pressed and not problems:
     try:
         times = np.linspace(0, t_end, N_TIMES)
-        snapshots = [fraction * planes[-1] / velocity for fraction in (0.25, 0.6, 1.0)]
         setup = dict(d=fd, gradient=gradient, porosity=porosity, alpha_l=alpha_l, alpha_t=alpha_t,
                      diffusion=diffusion, planes=planes, n_particles=n_particles, source=source,
                      snapshots=snapshots)
@@ -379,6 +399,7 @@ if st.button('Run transport', type='primary', disabled=bool(problems)):
         table += [(f'Source from {start:g} days', f'{value:g} mg/L') for start, value in zip(ts, cs)]
         table += [('Source', source_kind), ('Control planes (m)', ', '.join(f'{x:g}' for x in planes)),
                   ('Particles per field', n_particles),
+                  ('Snapshot times (days)', ', '.join(f'{t:g}' for t in snapshots)),
                   ('Dispersivity used for the uniform aquifer (m)', f'{dispersivity:.4g}')]
         st.session_state['transport'] = dict(
             times=times, curves=[np.array(c) for c in curves], theory=theory, planes=planes, source=source,
@@ -415,7 +436,8 @@ if 'transport' in st.session_state:
                'the left edge and the dashed lines are the control planes.')
     show(plots.clouds(fields[0], fd, first['snapshots'], r['snapshots'], rplanes, r['source'], colours, cmap=cmap),
          f'{prefix}_plume')
-    st.caption('Where solute released at time zero has reached at three times.')
+    st.caption('Where solute released at time zero has reached at each snapshot time. Particles that have '
+               'left through the right-hand edge are not shown.')
 
     st.subheader('Variation between fields')
     show(plots.spread(r['k_ratio'], r['medians'], rplanes, colours), f'{prefix}_variation')
@@ -471,12 +493,18 @@ with_dispersion = st.checkbox('Include local dispersion', value=False,
 track_planes = plane_list(st.text_input('Report the travel time to x (m)', value='',
                                         help='Optional. Up to four distances, separated by commas. The time to '
                                              'the right-hand edge is always reported.'), 'travel-time distances')
+if any(x >= size_x for x in track_planes):
+    track_planes = [x for x in track_planes if x < size_x]
+    st.caption(f'x = {size_x:g} m is the right-hand edge, which is always reported, so it is not listed twice.')
 if gradient <= 0:
     problems.append('Set a hydraulic gradient above zero in step 2.')
 for problem in problems:
     st.info(problem)
 
-if st.button('Track particles', type='primary', disabled=bool(problems)):
+track_pressed = st.button('Track particles', type='primary')
+if track_pressed and problems:
+    st.error('The particles were not tracked. Fix the points listed above, then press Track particles again.')
+if track_pressed and not problems:
     try:
         with st.spinner('Tracking...'):
             rng = np.random.default_rng(F['seed'] + 2)
