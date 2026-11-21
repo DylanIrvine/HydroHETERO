@@ -70,8 +70,10 @@ with st.expander('**Background: how it works**'):
     st.markdown(
         '**Fields.** The natural log of hydraulic conductivity, $\\ln K$, is normally distributed '
         'with a chosen geometric mean and standard deviation $\\sigma$. Its correlation falls off '
-        'with distance $r$ as $\\exp[-(r/\\ell)^2]$, where $\\ell$ is the correlation length. Three '
-        'structures are offered, all with the same distribution of $K$:\n'
+        'with distance as $\\exp[-(r_x/\\tau_x)^2 - (r_y/\\tau_y)^2]$, where $\\tau_x$ and $\\tau_y$ are '
+        'the correlation scales along $x$ (the flow direction) and $y$. With $\\tau_x$ larger than '
+        '$\\tau_y$ the field is layered along the flow, and with $\\tau_y$ larger it is layered across '
+        'the flow. Three structures are offered, all with the same distribution of $K$:\n'
         '- *Multi-Gaussian*: the standard model. The middle values form the connected network, '
         'and the extremes sit in isolated patches.\n'
         '- *Connected high K*: the highest values form connected channels.\n'
@@ -81,8 +83,8 @@ with st.expander('**Background: how it works**'):
     st.markdown(
         "$Y'$ is still standard normal, but its lowest values lie along the connected network. "
         "$\\ln K = \\mu + \\sigma Y'$ gives connected low K and $\\ln K = \\mu - \\sigma Y'$ gives "
-        'connected high K. The transform shortens the correlation length, so the starting field is '
-        'made with a longer one to compensate.\n\n'
+        'connected high K. The transform shortens the correlation scales, so the starting field is '
+        'made with longer ones to compensate.\n\n'
         '**Flow.** Heads are fixed on the left and right edges to give the chosen mean gradient, '
         'and the other two edges are closed. Steady flow is solved by finite differences, one head '
         'per cell, with the harmonic mean of $K$ between neighbouring cells.\n\n'
@@ -93,16 +95,19 @@ with st.expander('**Background: how it works**'):
         'source that changes in steps is the sum of shifted copies of that curve.\n\n'
         '**Uniform aquifer (theory).** The dashed line is the Ogata and Banks (1961) solution for a '
         'uniform aquifer with $K$ equal to the geometric mean and a dispersivity of '
-        r'$\alpha_L + \sigma^2 \ell \sqrt{\pi}/2$. The second term is the macrodispersivity from '
+        r'$\alpha_L + \sigma^2 \tau_x \sqrt{\pi}/2$. The second term is the macrodispersivity from '
         'first-order theory (Gelhar and Axness 1983; Dagan 1984), which holds far from the source '
-        'in a multi-Gaussian field with $\\sigma^2$ below about 1.\n\n'
+        'in a multi-Gaussian field with $\\sigma^2$ below about 1. When $\\tau_x$ and $\\tau_y$ differ, '
+        'the fields conduct more (layered along the flow) or less (layered across the flow) than the '
+        'geometric mean, so the dashed line arrives later or earlier than the fields do.\n\n'
         '**Limits**\n'
         '- 2D only. Connected paths form more easily in 3D, so the results do not carry over '
         'directly.\n'
-        '- The field needs at least four cells per correlation length, and the domain should be '
-        'many correlation lengths wide.\n'
+        '- The field needs at least four cells per correlation scale, and the domain should be '
+        'many correlation scales long and wide.\n'
         '- With the default grid the effective K of multi-Gaussian fields comes out a few percent '
-        'below the geometric mean, which theory gives for 2D. This is grid error.\n'
+        'below the geometric mean, which theory gives for 2D when $\\tau_x$ equals $\\tau_y$. This is '
+        'grid error.\n'
         '- The random walk leaves out a small drift term, so local dispersivities should be kept '
         'small compared with the cell size.\n'
         '- Solute cannot leave through the upstream edge or the sides.')
@@ -148,10 +153,13 @@ def number(label, value, column=st, **kwargs):
 st.header('1. Conductivity fields')
 structure = st.radio('Structure', model.STRUCTURES, horizontal=True)
 entered['Structure'] = structure
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 k_geometric = number('Geometric mean K (m/d)', 10.0, col1, min_value=0.0)
 sigma = number('Standard deviation of ln K', 1.5, col2, min_value=0.0, max_value=4.0)
-length = number('Correlation length (m)', 6.0, col3, min_value=0.0)
+col1, col2 = st.columns(2)
+length = number('Correlation scale, τx (m)', 6.0, col1, min_value=0.0)
+length_y = number('Correlation scale, τy (m)', 6.0, col2, min_value=0.0)
+st.caption('x is the flow direction. Equal values give fields with no preferred direction.')
 col1, col2, col3 = st.columns(3)
 domain_x = number('Domain length, x (m)', 200.0, col1, min_value=0.0)
 domain_y = number('Domain width, y (m)', 100.0, col2, min_value=0.0)
@@ -161,8 +169,8 @@ n_fields = col1.slider('Number of K fields', 1, 200, 30)
 seed = int(col2.number_input('Random seed', value=1, min_value=0, step=1,
                              help='The same seed and settings give the same fields.'))
 nx = ny = 0
-if min(k_geometric, length, domain_x, domain_y, d) <= 0:
-    problems.append('The mean K, correlation length, domain size and cell size must be greater than zero.')
+if min(k_geometric, length, length_y, domain_x, domain_y, d) <= 0:
+    problems.append('The mean K, correlation scales, domain size and cell size must be greater than zero.')
 else:
     nx, ny = int(round(domain_x / d)), int(round(domain_y / d))
     st.caption(f'{nx} by {ny} cells. K spans roughly {k_geometric * np.exp(-2 * sigma):.3g} to '
@@ -173,14 +181,16 @@ else:
         problems.append(f'{n_fields} fields of {nx * ny:,} cells is too much to hold in memory. Use fewer fields or a coarser grid.')
     if nx < 20 or ny < 10:
         problems.append('The grid needs at least 20 cells along x and 10 along y.')
-    if length < 4 * d:
-        problems.append('Use a cell size of at most a quarter of the correlation length.')
-    if length > domain_y / 6:
-        st.caption('The domain is less than six correlation lengths wide, so single channels or '
-                   'barriers can dominate and results will vary a lot between fields.')
+    if min(length, length_y) < 4 * d:
+        problems.append('Use a cell size of at most a quarter of the smaller correlation scale.')
+    if length_y > domain_y / 6 or length > domain_x / 6:
+        st.caption('The domain is less than six correlation scales '
+                   + ('long and wide' if length_y > domain_y / 6 and length > domain_x / 6 else
+                      'wide' if length_y > domain_y / 6 else 'long')
+                   + ', so single channels or barriers can dominate and results will vary a lot between fields.')
 for problem in problems:
     st.info(problem)
-field_inputs = (structure, k_geometric, sigma, length, domain_x, domain_y, d, n_fields, seed)
+field_inputs = (structure, k_geometric, sigma, length, length_y, domain_x, domain_y, d, n_fields, seed)
 
 generate_pressed = st.button('Generate fields', type='primary')
 if generate_pressed and problems:
@@ -190,14 +200,15 @@ if generate_pressed and not problems:
     bar = st.progress(0.0, text='Starting...')
     fields = []
     for i in range(n_fields):
-        fields.append(model.k_field(nx, ny, d, k_geometric, sigma, length, structure, rng))
+        fields.append(model.k_field(nx, ny, d, k_geometric, sigma, length, structure, rng, length_y))
         bar.progress((i + 1) / n_fields, text=f'Field {i + 1} of {n_fields}')
     bar.empty()
     table = [('App', f'{APP_NAME} version {APP_VERSION}'), ('Run date', dt.date.today().isoformat())]
     table += list(entered.items()) + [('Grid', f'{nx} by {ny} cells'), ('Number of K fields', n_fields),
                                       ('Random seed', seed)]
     st.session_state['fields'] = dict(K=fields, d=d, nx=nx, ny=ny, k_geometric=k_geometric, sigma=sigma,
-                                      length=length, structure=structure, seed=seed, settings=table,
+                                      length=length, length_y=length_y, structure=structure, seed=seed,
+                                      settings=table,
                                       inputs=field_inputs)
     for stale in ('transport', 'tracking', 'field_zip'):
         st.session_state.pop(stale, None)
@@ -429,6 +440,11 @@ if 'transport' in st.session_state:
     st.caption('The concentration is the flow-weighted average at each control plane, in the water '
                'that passed through the source. Thin grey lines are single fields (up to 60 shown). The '
                'dashed line is a uniform aquifer with the macrodispersivity from first-order theory.')
+    if F.get('length_y', F['length']) != F['length']:
+        st.caption('τx and τy differ, so the fields conduct ' + ('more' if F['length'] > F['length_y'] else 'less')
+                   + ' than the geometric mean K that the dashed line uses. Expect the fields to arrive '
+                   + ('earlier' if F['length'] > F['length_y'] else 'later') + ' than the dashed line. The '
+                   'Effective K / geometric mean value above gives the size of the difference.')
 
     st.subheader('Field 1')
     show(plots.field(fields[0], fd, first['paths'], rplanes, r['source'], colours, cmap=cmap), f'{prefix}_paths')

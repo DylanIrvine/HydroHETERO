@@ -17,24 +17,28 @@ STRUCTURES = ['Multi-Gaussian', 'Connected high K', 'Connected low K']
 CONNECTED_STRETCH = 1.7
 
 
-def gaussian_field(nx, ny, d, length, rng):
+def gaussian_field(nx, ny, d, length, rng, length_y=None):
     # a standard normal field with the covariance exp(-(r / length)^2), so length is the
     # distance at which the correlation falls to 1/e. This covariance gives smooth fields that
     # a grid of a few cells per length resolves. Made by filtering white noise in Fourier
-    # space on a grid twice the size, then cropping, so that opposite edges are not correlated
+    # space on a grid twice the size, then cropping, so that opposite edges are not correlated.
+    # length is the correlation scale along x. length_y, if given, is the scale along y, and
+    # the covariance becomes exp(-(rx / length)^2 - (ry / length_y)^2)
+    length_y = length if length_y is None else length_y
     mx, my = 2 * nx, 2 * ny
     kx = 2 * np.pi * np.fft.fftfreq(mx, d)
     ky = 2 * np.pi * np.fft.fftfreq(my, d)
-    k2 = kx[None, :] ** 2 + ky[:, None] ** 2
+    k2 = (kx[None, :] * length) ** 2 + (ky[:, None] * length_y) ** 2
     noise = np.fft.fft2(rng.standard_normal((my, mx)))
-    field = np.real(np.fft.ifft2(noise * np.exp(-k2 * length ** 2 / 8)))[:ny, :nx]
+    field = np.real(np.fft.ifft2(noise * np.exp(-k2 / 8)))[:ny, :nx]
     return (field - field.mean()) / field.std()
 
 
 def macrodispersivity(sigma, length):
     # long-distance longitudinal macrodispersivity from first-order theory (Gelhar and Axness
-    # 1983; Dagan 1984): variance of ln K times the integral scale, which is
-    # length * sqrt(pi) / 2 for this covariance. Valid for a multi-Gaussian field of small variance
+    # 1983; Dagan 1984): variance of ln K times the integral scale along the flow, which is
+    # length * sqrt(pi) / 2 for this covariance, with length the correlation scale along x.
+    # Valid for a multi-Gaussian field of small variance
     return sigma ** 2 * length * np.sqrt(np.pi) / 2
 
 
@@ -46,12 +50,14 @@ def connect(field):
     return np.sqrt(2) * erfinv(2 * u - 1)
 
 
-def k_field(nx, ny, d, k_geometric, sigma, length, structure, rng):
-    # K (m/d) with ln K normal: geometric mean k_geometric, standard deviation of ln K sigma
+def k_field(nx, ny, d, k_geometric, sigma, length, structure, rng, length_y=None):
+    # K (m/d) with ln K normal: geometric mean k_geometric, standard deviation of ln K sigma.
+    # length is the correlation scale along x and length_y the scale along y (the same if not given)
+    length_y = length if length_y is None else length_y
     if structure == 'Multi-Gaussian':
-        y = gaussian_field(nx, ny, d, length, rng)
+        y = gaussian_field(nx, ny, d, length, rng, length_y)
     else:
-        y = connect(gaussian_field(nx, ny, d, length * CONNECTED_STRETCH, rng))
+        y = connect(gaussian_field(nx, ny, d, length * CONNECTED_STRETCH, rng, length_y * CONNECTED_STRETCH))
         y = (y - y.mean()) / y.std()
         if structure == 'Connected high K':
             y = -y

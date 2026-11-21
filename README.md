@@ -13,7 +13,8 @@ HydroTRANSPORT, which holds the analytical solutions for uniform aquifers.
 ## Using it
 
 1. **Fields.** Choose the structure, geometric mean K, standard deviation of
-   ln K, correlation length, the domain and cell size, and how many fields to
+   ln K, correlation scales along x and y (τx and τy, with x the flow
+   direction), the domain and cell size, and how many fields to
    make. Generate them, look through them, and download them as one zip. This
    is a complete use of the app on its own.
 2. **Transport through every field (optional).** Set the gradient, porosity,
@@ -44,9 +45,10 @@ HydroTRANSPORT, which holds the analytical solutions for uniform aquifers.
   is rescaled to the exact mean and standard deviation asked for. The connected
   fields use the Zinn and Harvey (2003) transform, which keeps the distribution
   of K and moves either the lowest or the highest values onto the connected
-  network. The starting field is made with a correlation length 1.7 times
-  longer, which brings the final 1/e length to within about 5% of the value
-  asked for (found numerically).
+  network. The starting field is made with correlation scales 1.7 times
+  longer, which brings the final 1/e scales to within about 5% of the values
+  asked for (found numerically). τx and τy can differ, which gives fields
+  layered along the flow (τx larger) or across it (τy larger).
 - **Flow.** Cell-centred finite differences, harmonic mean K between cells,
   fixed heads on the left and right edges, closed sides, one sparse direct solve.
 - **Transport.** Particles are released on the source line in proportion to
@@ -57,8 +59,9 @@ HydroTRANSPORT, which holds the analytical solutions for uniform aquifers.
   curve, and a source that changes in steps is a sum of shifted copies of it.
 - **Uniform aquifer line.** Ogata and Banks (1961) with K equal to the
   geometric mean and a dispersivity of the local value plus the first-order
-  macrodispersivity, variance of ln K times the integral scale
-  (l x sqrt(pi) / 2).
+  macrodispersivity, variance of ln K times the integral scale along the flow
+  (τx x sqrt(pi) / 2). When τx and τy differ the fields conduct more or less
+  than the geometric mean, so this line is offset in time from the fields.
 
 ## Checks
 
@@ -68,8 +71,11 @@ HydroTRANSPORT, which holds the analytical solutions for uniform aquifers.
 - The node list and grid files hold each value at the stated position.
 - Layers along the flow give the arithmetic mean K, and every cell conserves
   water.
-- The fields have the mean, standard deviation and correlation length asked
-  for, and the connected transform keeps the normal distribution.
+- The fields have the mean, standard deviation and correlation scales asked
+  for, along x and along y, and the connected transform keeps the normal
+  distribution.
+- With different scales along x and y and a small variance, the effective K
+  matches first-order theory, Kg[1 + σ²(1/2 - τy/(τx + τy))], to within 3%.
 - Connected high K fields conduct more than the geometric mean and connected
   low K fields less, as Zinn and Harvey (2003) found.
 - In a multi-Gaussian field with a small variance, the mean arrival time
@@ -87,7 +93,7 @@ pytest tests/
 - Not compared with an established transport code (for example MODFLOW with
   MODPATH or MT3D).
 - On the default grid the effective K of multi-Gaussian fields averages about
-  4% below the geometric mean that theory gives for 2D. This is grid error from
+  4% below the geometric mean that theory gives for 2D with equal scales. This is grid error from
   the harmonic mean between cells.
 - The random walk leaves out the drift term that depends on the gradient of the
   dispersion coefficient. Keep local dispersivities small compared with a cell.

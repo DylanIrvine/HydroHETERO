@@ -24,6 +24,20 @@ def test_field_statistics():
         assert np.mean(scales) == pytest.approx(6.0, rel=0.1)
 
 
+def test_different_scales_along_x_and_y():
+    # the measured 1/e scales in each direction, and effective K against first-order theory
+    rng = np.random.default_rng(7)
+    for structure in model.STRUCTURES:
+        fields = [np.log(model.k_field(400, 300, 1.0, 10.0, 1.5, 12.0, structure, rng, 4.0)) for _ in range(8)]
+        assert np.mean([model.integral_scale(y, 1.0) for y in fields]) == pytest.approx(12.0, rel=0.1)
+        assert np.mean([model.integral_scale(y.T, 1.0) for y in fields]) == pytest.approx(4.0, rel=0.1)
+    for length, length_y in [(12.0, 4.0), (4.0, 12.0)]:
+        ratio = [model.effective_k(model.flow(model.k_field(400, 300, 1.0, 10.0, 0.5, length, 'Multi-Gaussian', rng,
+                                                            length_y), 1.0, 0.01)[1], 1.0, 0.01) / 10.0
+                 for _ in range(6)]
+        assert np.mean(ratio) == pytest.approx(1 + 0.25 * (0.5 - length_y / (length + length_y)), rel=0.03)
+
+
 def test_connected_transform_keeps_the_distribution():
     rng = np.random.default_rng(2)
     y = model.connect(rng.standard_normal(200000))
