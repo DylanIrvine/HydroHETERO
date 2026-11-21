@@ -22,7 +22,7 @@ APP_NAME = 'HydroHETERO'
 APP_URL = 'https://hydrohetero.streamlit.app/'
 LOGO = Path('logo/HydroHETERO_logo.png')
 FAVICON = Path('logo/HydroHETERO_icon.png')
-MAX_CELLS = 80000
+MAX_CELLS = 160000
 MAX_VALUES = 8_000_000      # cells times fields held in memory
 N_TIMES = 300
 
@@ -361,7 +361,7 @@ if not snapshots and planes:
     if not snapshot_text.strip():
         st.caption('Snapshots will be at ' + ', '.join(f'{t:g}' for t in snapshots) + ' days.')
 if not problems:
-    seconds = len(fields) * (F['nx'] * F['ny'] / 20000 * 0.08 + n_particles * F['nx'] / 200 * 1e-4)
+    seconds = len(fields) * ((F['nx'] * F['ny'] / 20000) ** 1.4 * 0.06 + n_particles * F['nx'] / 200 * 1e-4)
     st.caption(f'Rough run time: {max(1, round(seconds))} seconds on a typical server.')
 for problem in problems:
     st.info(problem)
